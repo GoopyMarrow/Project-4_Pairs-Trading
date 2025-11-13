@@ -110,7 +110,6 @@ def find_cointegrated_pairs(data: pd.DataFrame, non_stationary_assets: list) -> 
             "Strength", "jo_eigenvector"
         ]
 
-        # Imprimir solo las primeras filas para no inundar la consola si hay muchos pares
         print(pair_df[cols_to_print].to_string(index=False, float_format="%.4f"))
         print("--------------------------------------------------")
 
