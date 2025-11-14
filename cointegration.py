@@ -95,22 +95,19 @@ def find_cointegrated_pairs(data: pd.DataFrame, non_stationary_assets: list) -> 
     pair_df = pd.DataFrame(tested_pairs)
 
     if not pair_df.empty:
-        # "Strength"
         pair_df["Strength"] = pair_df["jo_trace_stat"] / pair_df["jo_crit_val"]
         pair_df = pair_df.sort_values(by="eg_p_value", ascending=True).reset_index(drop=True)
 
         print("\n--- Cointegrated Pairs Report (Passed All Tests) ---")
+        pair_df["jo_eigenvector"] = pair_df["jo_eigenvector"].apply(lambda x: np.round(x, 6))
 
-        pair_df["jo_eigenvector"] = pair_df["jo_eigenvector"].apply(lambda x: np.round(x, 4))
-
-        # Seleccionar y ordenar las columnas para la impresión
         cols_to_print = [
             "ticker1", "ticker2", "correlation", "eg_p_value",
             "jo_trace_stat", "jo_crit_val", "jo_coint",
             "Strength", "jo_eigenvector"
         ]
 
-        print(pair_df[cols_to_print].to_string(index=False, float_format="%.4f"))
+        print(pair_df[cols_to_print].to_string(index=False, float_format="%.6f"))
         print("--------------------------------------------------")
 
     print(f"Found {len(pair_df)} potential cointegrated pairs.")
