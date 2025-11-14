@@ -136,3 +136,67 @@ def plot_vecm_signals(observed_signal: list, filtered_signal: list, dates: pd.Da
     plt.xlabel('Date')
     plt.legend()
     plt.show()
+
+def plot_dynamic_eigenvectors(e1_history: list, e2_history: list, dates: pd.DatetimeIndex):
+    plt.figure(figsize=(14, 7))
+    pd.Series(e1_history, index=dates, name="Componente 1 (e1)").plot(color='c', label='Componente 1 (e1)')
+    pd.Series(e2_history, index=dates, name="Componente 2 (e2)").plot(color='m', label='Componente 2 (e2)')
+    plt.title('Evolución de Componentes del Eigenvector (KF2)')  # <-- Título cambiado
+    plt.xlabel('Fecha')
+    plt.ylabel('Valor del Componente')
+    plt.legend()
+    plt.show()
+
+def plot_kf1_spread(spread_history: list, dates: pd.DatetimeIndex, ticker1: str, ticker2: str):
+    plt.figure(figsize=(14, 7))
+    spread_series = pd.Series(spread_history, index=dates, name="Spread KF1")
+    spread_series.plot(color='darkorange', label='Spread (KF1)', alpha=0.9)  # <-- Color cambiado
+
+    mean_spread = spread_series.mean()
+    std_spread = spread_series.std()
+
+    plt.axhline(mean_spread, color='blue', linestyle='--', linewidth=1.5,
+                    label='Media del Spread')  # <-- Color cambiado
+    plt.fill_between(
+        spread_series.index,
+        mean_spread + std_spread,
+        mean_spread - std_spread,
+        color='blue',  # <-- Color cambiado
+        alpha=0.1,
+        label='±1 Desv. Estándar'
+    )
+
+    plt.title(f'Análisis del Spread (KF1) - {ticker2} vs {ticker1}')  # <-- Título cambiado
+    plt.xlabel('Fecha')
+    plt.ylabel('Valor del Spread (P2 - β_t * P1)')
+    plt.legend()
+    plt.show()
+
+def plot_spread_comparison(kf1_spread_history: list, vecm_norm_history: list, dates: pd.DatetimeIndex):
+    fig, ax1 = plt.subplots(figsize=(14, 7))
+
+    # Eje 1 para Spread KF1 (Bruto)
+    color_ax1 = 'tab:orange'  # <-- Color cambiado
+    ax1.set_xlabel('Fecha')
+    ax1.set_ylabel('Spread Bruto (KF1)', color=color_ax1)
+    ax1.plot(dates, kf1_spread_history, color=color_ax1, label='Spread (KF1)')
+    ax1.tick_params(axis='y', labelcolor=color_ax1)
+    ax1.grid(False)  # Desactivar grid de este eje para que no se vea doble
+
+    # Eje 2 para VECM Norm (Z-Score)
+    ax2 = ax1.twinx()
+    color_ax2 = 'tab:purple'  # <-- Color cambiado
+    ax2.set_ylabel('Señal Normalizada (VECM KF2)', color=color_ax2)
+    ax2.plot(dates, vecm_norm_history, color=color_ax2, label='VECM Normalizado (KF2)', linestyle='--')
+    ax2.tick_params(axis='y', labelcolor=color_ax2)
+    ax2.axhline(0, color='black', linestyle='-', linewidth=0.5)  # Línea cero para Z-score
+
+    fig.suptitle('Comparativa de Señales: KF1 (Bruto) vs. KF2 (Normalizado)')  # <-- Título cambiado
+    fig.tight_layout()
+
+    # Leyenda combinada
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
+
+    plt.show()
