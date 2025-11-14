@@ -27,9 +27,6 @@ def main():
         print("No cointegrated pairs found. Exiting.")
         return
 
-    print("\nTop 5 Cointegrated Pairs (from Train set):")
-    print(cointegrated_pairs.head())
-
     best_pair = cointegrated_pairs.iloc[0]
     ticker1 = best_pair['ticker1']
     ticker2 = best_pair['ticker2']
@@ -39,24 +36,37 @@ def main():
     train_pair = train_data[[ticker1, ticker2]].dropna()
     test_pair = test_data[[ticker1, ticker2]].dropna()
 
-    std_optimal = utils.optimize_std_threshold(
-        train_data=train_pair,
+    # --- 1. OPTIMIZE ON TRAIN SET ---
+    # We run this to see what the best parameter *would have been* on the training data.
+    print("\n--- Optimizing on TRAIN SET ---")
+    std_optimal_train, _ = utils.optimize_std_threshold(
+        data=train_pair,
         ticker1=ticker1,
         ticker2=ticker2,
-        window_size=config.DEFAULT_WINDOW_SIZE
+        window_size=config.DEFAULT_WINDOW_SIZE,
+        set_name="Train Set"
     )
+    print(f"\n--- Optimization complete (Train Set). Best Calmar Ratio at Std: {std_optimal_train:.2f} ---")
 
-    print(f"\n--- Running FINAL Backtest on TEST SET with Optimal Std: {std_optimal:.2f} ---")
-
-    final_backtest_run = PairsTradingBacktest(
+    # --- 2. OPTIMIZE ON TEST SET ---
+    # As requested, we now run the *entire optimization loop* on the test set.
+    print("\n--- Optimizing on TEST SET ---")
+    std_optimal_test, final_results = utils.optimize_std_threshold(
         data=test_pair,
         ticker1=ticker1,
         ticker2=ticker2,
         window_size=config.DEFAULT_WINDOW_SIZE,
-        entry_threshold=std_optimal
+        set_name="Test Set"
     )
+    print(f"\n--- Optimization complete (Test Set). Best Calmar Ratio at Std: {std_optimal_test:.2f} ---")
 
-    results = final_backtest_run.run_backtest()
+    # --- 3. RUN FINAL ANALYSIS USING BEST TEST SET PARAMETER ---
+    print(f"\n--- Running FINAL Analysis on TEST SET with Optimal Std: {std_optimal_test:.2f} ---")
+
+    # We don't need to run the backtest again.
+    # The 'final_results' variable already contains the results dictionary from the best run.
+    results = final_results
+    std_optimal = std_optimal_test  # Use this optimal std for plot titles
 
     print("\n--- Backtest Results (Test Set) ---")
     metrics = results["metrics"]
@@ -80,6 +90,7 @@ def main():
 
     full_dates_test = test_pair.index
 
+    # This date logic might still be tricky, ensure lengths match
     backtest_dates_test = test_pair.index[len(test_pair) - len(results["vecm_norm_history"]):]
     if len(backtest_dates_test) != len(results["vecm_norm_history"]):
         backtest_dates_test = test_pair.index[-len(results["vecm_norm_history"]):]
@@ -135,6 +146,30 @@ def main():
     plots.plot_vecm_signals(
         observed_signal=results["vecm_observed_history"],
         filtered_signal=results["vecm_filtered_history"],
+        dates=backtest_dates_test
+    )
+
+    # --- INICIO DE GRÁFICAS NUEVAS ---
+
+    # 9. Evolución del Spread de KF1 (Bruto)
+    plots.plot_kf1_spread(
+        spread_history=results["kf1_spread_history"],
+        dates=backtest_dates_test,
+        ticker1=ticker1,
+        ticker2=ticker2
+    )
+
+    # 10. Evolución de los Eigenvectores de KF2
+    plots.plot_dynamic_eigenvectors(
+        e1_history=results["e1_history"],
+        e2_history=results["e2_history"],
+        dates=backtest_dates_test
+    )
+
+    # 11. Comparativa Spread KF1 vs VECM Normalizado KF2
+    plots.plot_spread_comparison(
+        kf1_spread_history=results["kf1_spread_history"],
+        vecm_norm_history=results["vecm_norm_history"],
         dates=backtest_dates_test
     )
 
