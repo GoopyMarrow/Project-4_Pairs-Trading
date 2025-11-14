@@ -35,6 +35,9 @@ class PairsTradingBacktest:
         self.historical_observed_signal = []
         self.historical_hedge_ratio = []
         self.historical_vecm_norm = []
+        self.historical_kf1_spread = []
+        self.historical_e1_hat = []
+        self.historical_e2_hat = []
 
     def _init_kf1(self) -> KalmanFilter:
         return KalmanFilter(
@@ -67,7 +70,11 @@ class PairsTradingBacktest:
         w_pred, P_pred = self.kf_hedge.predict()
         w_upd, P_upd = self.kf_hedge.update(x_t_hedge, y_t_hedge, w_pred, P_pred)
         hedge_ratio = w_upd[1]
+        intercept = w_upd[0]
+        spread_kf1 = y_t_hedge - (intercept + hedge_ratio * p1)
+
         self.historical_hedge_ratio.append(hedge_ratio)
+        self.historical_kf1_spread.append(spread_kf1)
         return hedge_ratio
 
     def _update_kf2(self, p1: float, p2: float, rolling_data: pd.DataFrame) -> float:
@@ -83,6 +90,9 @@ class PairsTradingBacktest:
 
         e_pred, P_pred_e = self.kf_vecm.predict()
         e_upd, P_upd_e = self.kf_vecm.update(x_t_vecm_prices, y_t_vecm_signal, e_pred, P_pred_e)
+
+        self.historical_e1_hat.append(e_upd[0])
+        self.historical_e2_hat.append(e_upd[1])
 
         filtered_signal = np.dot(e_upd, x_t_vecm_prices)
         self.historical_filtered_signal.append(filtered_signal)
@@ -126,18 +136,17 @@ class PairsTradingBacktest:
             self.active_long_p1.exit_price = price
             self.active_long_p1.exit_date = row.name
             self.active_long_p1.commission += trade_cost
-            self.active_long_p1.pnl = (
-                                                  price - self.active_long_p1.entry_price) * self.active_long_p1.n_shares - self.active_long_p1.commission
+            self.active_long_p1.pnl = (price - self.active_long_p1.entry_price) * self.active_long_p1.n_shares - self.active_long_p1.commission
             self.all_positions.append(self.active_long_p1)
             self.active_long_p1 = None
 
         if self.active_short_p1:
             price = row[self.ticker1]
             trade_cost = self.active_short_p1.n_shares * price * self.commission
-            return_capital = self.active_short_p1.n_shares * self.active_short_p1.entry_price
+            #return_capital = self.active_short_p1.n_shares * self.active_short_p1.entry_price
             pnl = (self.active_short_p1.entry_price - price) * self.active_short_p1.n_shares
 
-            self.capital += return_capital + pnl - trade_cost
+            self.capital += pnl - trade_cost
 
             self.active_short_p1.exit_price = price
             self.active_short_p1.exit_date = row.name
@@ -154,18 +163,17 @@ class PairsTradingBacktest:
             self.active_long_p2.exit_price = price
             self.active_long_p2.exit_date = row.name
             self.active_long_p2.commission += trade_cost
-            self.active_long_p2.pnl = (
-                                                  price - self.active_long_p2.entry_price) * self.active_long_p2.n_shares - self.active_long_p2.commission
+            self.active_long_p2.pnl = (price - self.active_long_p2.entry_price) * self.active_long_p2.n_shares - self.active_long_p2.commission
             self.all_positions.append(self.active_long_p2)
             self.active_long_p2 = None
 
         if self.active_short_p2:
             price = row[self.ticker2]
             trade_cost = self.active_short_p2.n_shares * price * self.commission
-            return_capital = self.active_short_p2.n_shares * self.active_short_p2.entry_price
+            # return_capital = self.active_short_p2.n_shares * self.active_short_p2.entry_price
             pnl = (self.active_short_p2.entry_price - price) * self.active_short_p2.n_shares
 
-            self.capital += return_capital + pnl - trade_cost
+            self.capital += pnl - trade_cost
 
             self.active_short_p2.exit_price = price
             self.active_short_p2.exit_date = row.name
@@ -228,13 +236,13 @@ class PairsTradingBacktest:
             value += self.active_long_p1.n_shares * row[self.ticker1]
         if self.active_short_p1:
             pnl = (self.active_short_p1.entry_price - row[self.ticker1]) * self.active_short_p1.n_shares
-            value += (self.active_short_p1.entry_price * self.active_short_p1.n_shares) + pnl
+            value += pnl
 
         if self.active_long_p2:
             value += self.active_long_p2.n_shares * row[self.ticker2]
         if self.active_short_p2:
             pnl = (self.active_short_p2.entry_price - row[self.ticker2]) * self.active_short_p2.n_shares
-            value += (self.active_short_p2.entry_price * self.active_short_p2.n_shares) + pnl
+            value += pnl
 
         return value
 
@@ -291,5 +299,8 @@ class PairsTradingBacktest:
             "vecm_observed_history": self.historical_observed_signal,
             "ticker1": self.ticker1,
             "ticker2": self.ticker2,
-            "entry_threshold": self.entry_threshold
+            "entry_threshold": self.entry_threshold,
+            "kf1_spread_history": self.historical_kf1_spread,
+            "e1_history": self.historical_e1_hat,
+            "e2_history": self.historical_e2_hat
         }
