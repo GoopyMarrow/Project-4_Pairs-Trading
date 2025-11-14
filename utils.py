@@ -4,8 +4,25 @@ from backtest import PairsTradingBacktest
 import config
 import matplotlib.pyplot as plt
 
+"""
+Utilities Module
+
+Contains helper functions for data splitting and parameter optimization.
+"""
+
 
 def split_data(data: pd.DataFrame, train_pct: float, test_pct: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Splits the data into training and testing sets based on percentages.
+
+    Args:
+        data: The full DataFrame of price data.
+        train_pct: The percentage of data to use for training (e.g., 0.6).
+        test_pct: The percentage of data to use for testing (e.g., 0.4).
+
+    Returns:
+        A tuple of (train_data, test_data).
+    """
     train_end = int(len(data) * train_pct)
 
     train_data = data.iloc[:train_end]
@@ -15,11 +32,27 @@ def split_data(data: pd.DataFrame, train_pct: float, test_pct: float) -> tuple[p
     return train_data, test_data
 
 
-def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, window_size: int, set_name: str = "Train Set") -> tuple[float, dict]:
+def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, window_size: int,
+                           set_name: str = "Train Set") -> tuple[float, dict]:
     """
-    Runs optimization loop on the provided dataset and returns the best std and the results of that best run.
+    Iterates through a range of entry thresholds (theta/std) and runs a
+    backtest for each one to find the best-performing parameter based on
+    Calmar Ratio.
+
+    Args:
+        data: The price data (either train or test set).
+        ticker1: The symbol for the first asset.
+        ticker2: The symbol for the second asset.
+        window_size: The rolling window size.
+        set_name: A string label for the optimization (e.g., "Train Set").
+
+    Returns:
+        A tuple of (best_std, best_run_results):
+        - best_std: The 'theta' value that produced the highest Calmar Ratio.
+        - best_run_results: The full results dictionary from that best run.
     """
     print(f"Optimizing entry threshold on {set_name}...")
+    # Generate the range of thetas (stds) to test
     std_thresholds = np.arange(
         config.OPTIMIZATION_MIN_STD,
         config.OPTIMIZATION_MAX_STD + config.OPTIMIZATION_STEP,
@@ -28,14 +61,13 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
 
     best_calmar = -np.inf
     best_std = config.OPTIMIZATION_MIN_STD
-    best_run_results = {} # <-- To store the best simulation results
-
+    best_run_results = {}  # Stores the full results dict of the best run
     results_list = []
 
+    # Run a backtest for each theta value
     for std in std_thresholds:
-        # Note: This assumes you will pre-fill the history for the test set.
-        # If not, the first year of the test set will have 0.0 signals.
-        # For this request, we assume each backtest is independent.
+
+        # This creates a new, independent backtest for each simulation
         backtest_sim = PairsTradingBacktest(
             data=data,
             ticker1=ticker1,
@@ -46,9 +78,11 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
 
         sim_results = backtest_sim.run_backtest()
 
+        # Extract metrics for comparison
         metrics = sim_results["metrics"]
         positions = sim_results["positions"]
 
+        # Calculate trade stats
         num_trades = len(positions)
         if num_trades > 0:
             win_rate = np.mean([1 if pos.pnl > 0 else 0 for pos in positions])
@@ -57,6 +91,7 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
             win_rate = 0.0
             avg_pnl = 0.0
 
+        # Log results for the summary table
         results_list.append({
             "Theta (Std)": std,
             "Calmar Ratio": metrics["Calmar Ratio"],
@@ -71,14 +106,15 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
         })
 
         calmar = metrics["Calmar Ratio"]
-        # Check if this run is better
+
+        # Check if this run is the new best
         if calmar > best_calmar:
             best_calmar = calmar
             best_std = std
-            best_run_results = sim_results # <-- Save the results dictionary
+            best_run_results = sim_results  # Save the results of this run
 
+    # --- Print Optimization Summary Table ---
     print(f"\n--- Optimization Results ({set_name}) ---")
-
     results_df = pd.DataFrame(results_list)
 
     cols_order = [
@@ -87,6 +123,7 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
     ]
     results_df = results_df[cols_order]
 
+    # Define formatting for the table
     formatters = {
         "Theta (Std)": "{:.2f}".format,
         "Calmar Ratio": "{:.4f}".format,
@@ -103,27 +140,25 @@ def optimize_std_threshold(data: pd.DataFrame, ticker1: str, ticker2: str, windo
     print(results_df.to_string(index=False, formatters=formatters))
     print("--------------------------------------------------\n")
 
-    # print(f"Optimization complete. Best Calmar Ratio: {best_calmar:.4f} at Std: {best_std:.2f}")
-
+    # --- Plot Optimization Results ---
     try:
-        # Plot optimization results for this set
         ax = results_df.set_index('Theta (Std)')['Calmar Ratio'].plot(kind='bar')
         plt.title(f'Calmar Ratio vs. Entry Threshold ({set_name})')
         plt.xlabel('Entry STD Threshold (Theta)')
         plt.ylabel('Calmar Ratio')
-        # Ensure xticks are not too crowded
+
+        # Clean up x-axis labels if there are too many
         if len(std_thresholds) > 20:
-             # Show every Nth label
-             n = int(len(std_thresholds) / 10)
-             ticks = ax.get_xticks()
-             labels = [item.get_text() for item in ax.get_xticklabels()]
-             ax.set_xticks(ticks[::n])
-             ax.set_xticklabels(labels[::n])
+            n = int(len(std_thresholds) / 10)  # Show every Nth label
+            ticks = ax.get_xticks()
+            labels = [item.get_text() for item in ax.get_xticklabels()]
+            ax.set_xticks(ticks[::n])
+            ax.set_xticklabels(labels[::n])
 
         plt.tight_layout()
         plt.show()
     except Exception as e:
         print(f"Could not plot optimization results: {e}")
 
-    # Return the best std *and* the results dictionary from that run
+    # Return the best parameter and the full results from that run
     return best_std, best_run_results
