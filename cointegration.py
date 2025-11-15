@@ -101,20 +101,21 @@ def find_cointegrated_pairs(data: pd.DataFrame, non_stationary_assets: list) -> 
     """
     Screens all combinations of non-stationary assets to find cointegrated pairs.
 
-    A pair must pass three tests:
-    1. High Correlation (config.CORRELATION_THRESHOLD)
-    2. Engle-Granger Test (config.ADF_P_VALUE_THRESHOLD)
-    3. Johansen Test
+    This function now performs two main tasks:
+    1. Runs all tests (Correlation, Engle-Granger, Johansen) on all pairs
+       and prints a comprehensive report of all results (pass or fail).
+    2. Filters this report to return a DataFrame containing only the pairs
+       that passed *all* tests, sorted for selection.
 
     Args:
         data: DataFrame of all asset prices.
         non_stationary_assets: A list of tickers to screen.
 
     Returns:
-        A DataFrame of all pairs that passed the tests, sorted by strength.
+        A DataFrame of *only the successful* pairs, sorted by Engle-Granger p-value.
     """
     print("Screening for cointegrated pairs...")
-    tested_pairs = []
+    all_pairs_results = []
 
     # Iterate through all unique combinations of assets
     for ticker1, ticker2 in combinations(non_stationary_assets, 2):
@@ -126,50 +127,90 @@ def find_cointegrated_pairs(data: pd.DataFrame, non_stationary_assets: list) -> 
 
         # --- Test 1: Correlation ---
         correlation = pair_data.corr().iloc[0, 1]
-        if correlation < CORRELATION_THRESHOLD:
-            continue
+        passed_corr = correlation >= CORRELATION_THRESHOLD
 
         # --- Test 2: Engle-Granger ---
         eg_coint, eg_p_value, eg_hedge_ratio = run_engle_granger_test(pair_data[ticker1], pair_data[ticker2])
-        if not eg_coint:
-            continue
+        passed_eg = eg_coint  # eg_coint is already a boolean
 
         # --- Test 3: Johansen ---
         jo_coint, jo_trace_stat, jo_crit_val, jo_eigenvector = run_johansen_test(pair_data)
-        if not jo_coint:
-            continue
+        passed_jo = jo_coint  # jo_coint is already a boolean
 
-        # --- Passed All Tests ---
-        tested_pairs.append({
+        # --- Aggregate Results ---
+        strength = 0.0
+        if jo_crit_val > 0:  # Avoid division by zero
+            strength = jo_trace_stat / jo_crit_val
+
+        passed_all = passed_corr and passed_eg and passed_jo
+
+        all_pairs_results.append({
             "ticker1": ticker1,
             "ticker2": ticker2,
             "correlation": correlation,
+            "passed_corr": passed_corr,
             "eg_p_value": eg_p_value,
+            "passed_eg": passed_eg,
             "jo_trace_stat": jo_trace_stat,
             "jo_crit_val": jo_crit_val,
-            "jo_coint": jo_coint,
-            "jo_eigenvector": jo_eigenvector
+            "passed_jo": passed_jo,
+            "jo_eigenvector": jo_eigenvector,
+            "Strength": strength,
+            "passed_all": passed_all
         })
 
-    pair_df = pd.DataFrame(tested_pairs)
+    # --- New Step: Create and Print Full Report ---
+    if not all_pairs_results:
+        print("No pairs were tested (e.g., insufficient non-stationary assets).")
+        return pd.DataFrame()
+
+    all_results_df = pd.DataFrame(all_pairs_results)
+
+    # Sort the full report for readability (e.g., by failures, then correlation)
+    all_results_df = all_results_df.sort_values(
+        by=["passed_all", "passed_corr", "passed_eg", "passed_jo", "correlation"],
+        ascending=[False, False, False, False, False]
+    )
+
+    print("\n--- Full Cointegration Screening Report (All Pairs) ---")
+
+    # Define columns for the full report
+    cols_to_print_full = [
+        "ticker1", "ticker2", "correlation", "passed_corr",
+        "eg_p_value", "passed_eg", "jo_trace_stat", "passed_jo", "passed_all"
+    ]
+
+    # Define formatting for the full report
+    formatters_full = {
+        "correlation": "{:.4f}".format,
+        "eg_p_value": "{:.4f}".format,
+        "jo_trace_stat": "{:.2f}".format,
+    }
+
+    print(all_results_df[cols_to_print_full].to_string(index=False, formatters=formatters_full))
+    print("--------------------------------------------------")
+
+    # --- Existing Logic: Filter for successful pairs ---
+    pair_df = all_results_df[all_results_df["passed_all"] == True].copy()
 
     if not pair_df.empty:
-        # Calculate "Strength" as a ratio of trace_stat to its critical value
-        pair_df["Strength"] = pair_df["jo_trace_stat"] / pair_df["jo_crit_val"]
-        # Sort by Engle-Granger p-value (lowest is best)
+        # Sort the *successful* pairs for selection
         pair_df = pair_df.sort_values(by="eg_p_value", ascending=True).reset_index(drop=True)
 
         print("\n--- Cointegrated Pairs Report (Passed All Tests) ---")
-        pair_df["jo_eigenvector"] = pair_df["jo_eigenvector"].apply(lambda x: np.round(x, 6))
 
-        cols_to_print = [
+        # Rename 'passed_jo' to 'jo_coint' for the print to match old format
+        pair_df_print = pair_df.rename(columns={"passed_jo": "jo_coint"})
+        pair_df_print["jo_eigenvector"] = pair_df_print["jo_eigenvector"].apply(lambda x: np.round(x, 6))
+
+        cols_to_print_filtered = [
             "ticker1", "ticker2", "correlation", "eg_p_value",
             "jo_trace_stat", "jo_crit_val", "jo_coint",
             "Strength", "jo_eigenvector"
         ]
 
-        print(pair_df[cols_to_print].to_string(index=False, float_format="%.6f"))
+        print(pair_df_print[cols_to_print_filtered].to_string(index=False, float_format="%.6f"))
         print("--------------------------------------------------")
 
-    print(f"Found {len(pair_df)} potential cointegrated pairs.")
+    print(f"Found {len(pair_df)} potential cointegrated pairs (passed all tests).")
     return pair_df
