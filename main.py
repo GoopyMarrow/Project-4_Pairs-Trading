@@ -56,7 +56,7 @@ def main():
     # We run this to find the optimal theta for the training period.
     # This is useful for comparison (e.g., checking for overfitting).
     print("\n--- Optimizing on TRAIN SET ---")
-    std_optimal_train, _ = utils.optimize_std_threshold(
+    std_optimal_train, train_results = utils.optimize_std_threshold(
         data=train_pair,
         ticker1=ticker1,
         ticker2=ticker2,
@@ -103,8 +103,23 @@ def main():
         avg_pnl = np.mean([pos.pnl for pos in results["positions"]])
         print(f"Average PnL per Trade: {avg_pnl:.2f}")
 
+        total_commissions = np.sum([pos.commission for pos in results["positions"]])
+        total_borrow_costs = np.sum([pos.borrow_cost for pos in results["positions"]])
+
+        print("\n--- Cost Analysis (Test Set) ---")
+        print(f"Total Commissions Paid: ${total_commissions:,.2f}")
+        print(f"Total Borrow Costs Paid: ${total_borrow_costs:,.2f}")
+
     # --- 6. Generate Final Plots ---
     print("\n--- Generating Plots (Test Set Results) ---")
+
+    plots.plot_portfolio_value(
+        portfolio_value=train_results["portfolio_value"],
+        dates=train_pair.index,
+        ticker1=ticker1,
+        ticker2=ticker2,
+        threshold=std_optimal_train
+    )
 
     window_size = config.DEFAULT_WINDOW_SIZE
     full_dates_test = test_pair.index

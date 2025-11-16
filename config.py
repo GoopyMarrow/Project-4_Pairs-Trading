@@ -37,7 +37,7 @@ OPTIMIZATION_MIN_STD = 0.5   # Start of theta optimization range
 OPTIMIZATION_MAX_STD = 3.0   # End of theta optimization range
 OPTIMIZATION_STEP = 0.1      # Step size for theta optimization
 ENTRY_THRESHOLD = None       # To be set by optimization
-EXIT_THRESHOLD = 0.50        # Z-score threshold to close a position (was 0.10)
+EXIT_THRESHOLD = 0.1        # Z-score threshold to close a position (was 0.10)
 
 # --- Kalman Filter 1 (Hedge Ratio) Settings ---
 # Model: P2 = B0 + B1*P1 + e
