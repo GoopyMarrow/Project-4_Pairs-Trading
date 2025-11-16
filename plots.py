@@ -222,37 +222,3 @@ def plot_kf1_spread(spread_history: list, dates: pd.DatetimeIndex, ticker1: str,
     plt.ylabel('Spread Value (P2 - β_t * P1)')
     plt.legend()
     plt.show()
-
-
-def plot_spread_comparison(kf1_spread_history: list, vecm_norm_history: list, dates: pd.DatetimeIndex):
-    """
-    Compares the raw KF1 spread (left-axis) vs. the normalized KF2 Z-score
-    (right-axis).
-    """
-    fig, ax1 = plt.subplots(figsize=(14, 7))
-
-    # Axis 1: Raw Spread from KF1 (Uses 1st blue)
-    color_ax1 = 'royalblue'
-    ax1.set_xlabel('Date')
-    ax1.set_ylabel('Raw Spread (KF1)', color=color_ax1)
-    ax1.plot(dates, kf1_spread_history, color=color_ax1, label='Spread (KF1)')
-    ax1.tick_params(axis='y', labelcolor=color_ax1)
-    ax1.grid(False)
-
-    # Axis 2: Normalized Z-Score from KF2 (Uses 1st purple)
-    ax2 = ax1.twinx()
-    color_ax2 = 'mediumpurple'
-    ax2.set_ylabel('Normalized Signal (VECM KF2)', color=color_ax2)
-    ax2.plot(dates, vecm_norm_history, color=color_ax2, label='Normalized VECM (KF2)', linestyle='--')
-    ax2.tick_params(axis='y', labelcolor=color_ax2)
-    ax2.axhline(0, color='black', linestyle='-', linewidth=0.5)
-
-    fig.suptitle('Signal Comparison: Raw KF1 vs. Normalized KF2')
-    fig.tight_layout()
-
-    # Create a combined legend for both axes
-    lines, labels = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc='upper left')
-
-    plt.show()

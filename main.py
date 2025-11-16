@@ -198,13 +198,6 @@ def main():
         dates=backtest_dates_test
     )
 
-    # Plot 11: KF1 Spread vs. KF2 Z-Score
-    plots.plot_spread_comparison(
-        kf1_spread_history=results["kf1_spread_history"],
-        vecm_norm_history=results["vecm_norm_history"],
-        dates=backtest_dates_test
-    )
-
     print("\n--- Process Complete ---")
 
 
